@@ -18,26 +18,59 @@ beforeEach(async () => {
     .deploy({ data: compiledFactory.bytecode })
     .send({ from: accounts[0], gas: "1000000" });
 
-  await factory.methods.createCampaign('100').send({ from: accounts[0], gas: "1000000" });
+  await factory.methods
+    .createCampaign("100")
+    .send({ from: accounts[0], gas: "1000000" });
 
   [campaignAddress] = await factory.methods.getDeployedCampaigns().call();
-  campaign = await new web3.eth.Contract(JSON.parse(compiledCampaign.interface),campaignAddress);
+  campaign = await new web3.eth.Contract(
+    JSON.parse(compiledCampaign.interface),
+    campaignAddress
+  );
 });
 
-describe("campaign",()=>{
-it("deploys a campaign and a factory",()=>{
-  assert.ok(factory.options.address);
-  assert.ok(campaign.options.address);
+describe("campaign", () => {
+  it("deploys a campaign and a factory", () => {
+    assert.ok(factory.options.address);
+    assert.ok(campaign.options.address);
+  });
+  it("marks a caller as the campaign manager", async () => {
+    const manager = await campaign.methods.manager().call();
+    assert.equal(accounts[0], manager);
+  });
+  it("allow people to contribute the money and make as the approvers in the contract", async () => {
+    await campaign.methods
+      .contribute()
+      .send({ value: "200", from: accounts[1] });
+    const isContributor = await campaign.methods.approvers(accounts[1]).call();
+    console.log(isContributor);
+    assert(isContributor);
+  });
+  it("requires the minimum contribution", async () => {
+    try {
+      await campaign.methods
+        .contribute()
+        .send({ from: accounts[1], value: "5" });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('allows manager to make a payment request',async()=>{
+    await campaign.methods.createRequest("Buy office laptops",'100',accounts[1]).send({from:accounts[0],gas:'1000000'});
+ const request =await campaign.methods.requests(0).call();
+  assert.equal("Buy office laptops",request.description);
+  });
+  it('process the request',async() => {
+    await campaign.methods.contribute().send({from:accounts[0],value:web3.utils.toWei('10','ether')});
+    await campaign.methods.createRequest("A",web3.utils.toWei('5','ether'),accounts[1]).send({from:accounts[0],gas:'1000000'});
+    await campaign.methods.approveRequest(0).send({from:accounts[0],gas:'1000000'});
+    await campaign.methods.finalizeRequest(0).send({from:accounts[0],gas:'1000000'});
+    let balance =await web3.eth.getBalance(accounts[1]);
+    console.log("d",balance);
+    balance =web3.utils.fromWei(balance,'ether');
+    balance= parseFloat(balance);
+    console.log(balance);
+    assert(balance > 104);
+  })
 });
-it("marks a caller as the campaign manager",async ()=>{
-  const manager= await campaign.methods.manager().call();
-  assert.equal(accounts[0],manager);
-});
-it("allow people to contribute the money and make as the approvers in the contract",async ()=>{
-  await campaign.methods.contribute().send({value:'200',from:accounts[1]});
-  const isContributor = await campaign.methods.approvers(accounts[1]).call();
-  console.log(isContributor)
-  assert(isContributor);
-})
-
-})
